@@ -1,0 +1,86 @@
+# Unit tests for router/k8s-router.vrl. Run with hack/test.sh
+tests:
+  - name: fluent-bit traefik access log (Merge_Log) is routed with its JSON fields
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "traefik", "pod_name": "traefik-abc", "container_name": "traefik",
+                "host": "node1", "labels": {"samma.io/detection": "traefik", "app": "traefik"}},
+               "RequestPath": "/.env", "DownstreamStatus": 404, "ClientHost": "203.0.113.9",
+               "stream": "stdout", "logtag": "F", "host": "192.0.2.10", "time": "2026-11-25T10:00:00Z", "timestamp": t'2026-11-25T10:00:00.123Z'}
+    outputs:
+      - extract_from: k8s_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.source, "traefik")
+              assert_eq!(.feed, "k8s")
+              assert_eq!(.RequestPath, "/.env")
+              assert_eq!(.DownstreamStatus, 404)
+              assert_eq!(.k8s, {"namespace": "traefik", "pod": "traefik-abc", "container": "traefik", "node": "node1"})
+              assert_eq!(.event_time, "2026-11-25T10:00:00.123Z")
+              assert!(!exists(.kubernetes))
+              assert!(!exists(.stream))
+              assert!(!exists(.host))
+              assert!(!exists(.logtag))
+
+  - name: Vector agent JSON line is parsed, and the log cannot forge the envelope
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"pod_namespace": "traefik", "pod_name": "traefik-x", "container_name": "traefik",
+                "pod_node_name": "node2", "pod_labels": {"samma.io/detection": "traefik"}},
+               "message": "{\"RequestPath\":\"/admin\",\"source\":\"wazuh\",\"k8s\":{\"namespace\":\"kube-system\"}}",
+               "source_type": "kubernetes_logs", "file": "/var/log/pods/x.log"}
+    outputs:
+      - extract_from: k8s_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.source, "traefik")
+              assert_eq!(.RequestPath, "/admin")
+              assert_eq!(.k8s.namespace, "traefik")
+              assert_eq!(.k8s.node, "node2")
+              assert!(!exists(.file))
+              assert!(starts_with(string!(.search_text), "{\"RequestPath\""))
+
+  - name: plain text line is kept as message
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "traefik", "labels": {"samma.io/detection": "traefik"}},
+               "log": "time=x level=info msg=started"}
+    outputs:
+      - extract_from: k8s_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.message, "time=x level=info msg=started")
+              assert_eq!(.search_text, "time=x level=info msg=started")
+
+  - name: allowed lane from a namespace not allowed for it is dropped
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "default", "labels": {"samma.io/detection": "traefik"}}, "log": "x"}
+    no_outputs_from: [k8s_route]
+
+  - name: lane not in the allowlist is dropped
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "samma", "labels": {"samma.io/detection": "wazuh"}}, "log": "x"}
+    no_outputs_from: [k8s_route]
+
+  - name: unlabelled pod is dropped
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "traefik", "labels": {"app": "traefik"}}, "log": "x"}
+    no_outputs_from: [k8s_route]

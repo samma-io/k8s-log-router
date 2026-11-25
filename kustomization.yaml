@@ -1,0 +1,13 @@
+# kubectl apply -k github.com/samma-io/k8s-log-router?ref=<commit>
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: samma
+labels:
+  - pairs: {app.kubernetes.io/part-of: siem}
+resources:
+  - deploy/k8s-log-router.yaml
+configMapGenerator:
+  - name: k8s-log-router
+    files:
+      - router/vector.yaml
+      - router/k8s-router.vrl

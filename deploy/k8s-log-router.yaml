@@ -1,0 +1,66 @@
+# k8s-log-router Deployment and Service. Apply with kustomize from the repo
+# root (kubectl apply -k .), which generates the ConfigMap from router/ with a
+# content hash, so a config change rolls the pod by itself.
+#
+# NATS_URL below is the in-cluster NATS of a Samma SIEM in namespace samma;
+# change it for another layout.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-log-router
+  labels: &labels
+    app.kubernetes.io/name: k8s-log-router
+    app.kubernetes.io/part-of: siem
+spec:
+  replicas: 1
+  selector:
+    matchLabels: *labels
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: vector
+          image: timberio/vector:0.53.0-distroless-libc
+          args: ["--config", "/etc/k8s-log-router/vector.yaml"]
+          env:
+            - {name: NATS_URL, value: "nats://nats.samma.svc:4222"}
+            - {name: VRL_DIR, value: /etc/k8s-log-router}
+          ports:
+            - {name: fluent, containerPort: 24224}
+            - {name: vector, containerPort: 6000}
+            - {name: vector-api, containerPort: 8686}
+          livenessProbe:
+            httpGet: {path: /health, port: vector-api}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: {path: /health, port: vector-api}
+            periodSeconds: 10
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/k8s-log-router, readOnly: true}
+            - {name: data, mountPath: /var/lib/vector}
+      volumes:
+        - name: config
+          configMap: {name: k8s-log-router}
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-log-router
+  labels: {app.kubernetes.io/part-of: siem}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: k8s-log-router
+  ports:
+    - {name: fluent, port: 24224, targetPort: fluent}
+    - {name: vector, port: 6000, targetPort: vector}
