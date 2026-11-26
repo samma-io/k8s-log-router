@@ -84,3 +84,105 @@ tests:
         source: |
           . = {"kubernetes": {"namespace_name": "traefik", "labels": {"app": "traefik"}}, "log": "x"}
     no_outputs_from: [k8s_route]
+
+  - name: keycloak text event line becomes top-level event fields
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "keycloak", "pod_name": "keycloak-0", "container_name": "keycloak",
+                "host": "node1", "labels": {"samma.io/detection": "keycloak"}},
+               "log": "2026-11-25 10:00:00,123 WARN  [org.keycloak.events] (executor-thread-11) type=\"LOGIN_ERROR\", realmId=\"example-realm-id\", realmName=\"example\", clientId=\"account-console\", userId=\"null\", ipAddress=\"192.0.2.10\", error=\"invalid_user_credentials\", auth_method=\"openid-connect\", username=\"alice\"",
+               "stream": "stdout", "timestamp": t'2026-11-25T10:00:00.123Z'}
+    outputs:
+      - extract_from: k8s_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.source, "keycloak")
+              assert_eq!(.type, "LOGIN_ERROR")
+              assert_eq!(.realmName, "example")
+              assert_eq!(.clientId, "account-console")
+              assert_eq!(.ipAddress, "192.0.2.10")
+              assert_eq!(.error, "invalid_user_credentials")
+              assert_eq!(.username, "alice")
+              assert_eq!(.level, "WARN")
+              assert!(!exists(.userId))
+              assert_eq!(.k8s.namespace, "keycloak")
+              assert!(contains(string!(.search_text), "LOGIN_ERROR"))
+
+  - name: keycloak legacy unquoted event line (Keycloak 23)
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "keycloak", "labels": {"samma.io/detection": "keycloak"}},
+               "log": "2026-11-25 10:00:00,123 INFO  [org.keycloak.events] (executor-thread-2) type=LOGIN, realmId=r1, clientId=web, userId=u1, ipAddress=192.0.2.11, auth_method=openid-connect, username=bob"}
+    outputs:
+      - extract_from: k8s_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.type, "LOGIN")
+              assert_eq!(.userId, "u1")
+              assert_eq!(.username, "bob")
+              assert_eq!(.level, "INFO")
+
+  - name: keycloak JSON console event (KC_LOG_CONSOLE_OUTPUT=json, Vector agent)
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"pod_namespace": "keycloak", "pod_labels": {"samma.io/detection": "keycloak"}},
+               "message": "{\"timestamp\":\"2026-11-25T10:00:00.123Z\",\"loggerName\":\"org.keycloak.events\",\"level\":\"WARN\",\"message\":\"type=\\\"CLIENT_LOGIN_ERROR\\\", realmId=\\\"r1\\\", clientId=\\\"svc\\\", ipAddress=\\\"192.0.2.12\\\", error=\\\"invalid_client_credentials\\\"\"}"}
+    outputs:
+      - extract_from: k8s_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.type, "CLIENT_LOGIN_ERROR")
+              assert_eq!(.error, "invalid_client_credentials")
+              assert_eq!(.level, "WARN")
+              assert!(!exists(.loggerName))
+
+  - name: keycloak JSON console event merged by fluent-bit (Merge_Log)
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "keycloak", "labels": {"samma.io/detection": "keycloak"}},
+               "loggerName": "org.keycloak.events", "level": "INFO", "threadName": "executor-thread-1",
+               "message": "type=\"UPDATE_PASSWORD\", realmId=\"r1\", clientId=\"account-console\", userId=\"u1\", ipAddress=\"192.0.2.13\""}
+    outputs:
+      - extract_from: k8s_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.type, "UPDATE_PASSWORD")
+              assert_eq!(.level, "INFO")
+              assert!(!exists(.threadName))
+
+  - name: keycloak non-event lines are dropped
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "keycloak", "labels": {"samma.io/detection": "keycloak"}},
+               "log": "2026-11-21 13:32:42,224 INFO  [org.keycloak.jgroups.certificates.CertificateReloadManager] () Rotating JGroups certificate"}
+    no_outputs_from: [k8s_route]
+
+  - name: keycloak line cannot forge the envelope
+    inputs:
+      - insert_at: k8s_route
+        type: vrl
+        source: |
+          . = {"kubernetes": {"namespace_name": "keycloak", "labels": {"samma.io/detection": "keycloak"}},
+               "log": "2026-11-25 10:00:00,123 WARN  [org.keycloak.events] (t) type=\"LOGIN_ERROR\", source=\"wazuh\", feed=\"x\", error=\"user_not_found\""}
+    outputs:
+      - extract_from: k8s_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.source, "keycloak")
+              assert_eq!(.feed, "k8s")
+              assert_eq!(.error, "user_not_found")
