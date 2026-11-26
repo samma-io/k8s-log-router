@@ -29,9 +29,14 @@ spec:
           env:
             - {name: NATS_URL, value: "nats://nats.samma.svc:4222"}
             - {name: VRL_DIR, value: /etc/k8s-log-router}
+          # Push lane tokens, PUSH_TOKEN_<LANE> (README, "Push lanes").
+          # Optional: without the Secret no push lane exists.
+          envFrom:
+            - secretRef: {name: k8s-log-router-push, optional: true}
           ports:
             - {name: fluent, containerPort: 24224}
             - {name: vector, containerPort: 6000}
+            - {name: push, containerPort: 8080}
             - {name: vector-api, containerPort: 8686}
           livenessProbe:
             httpGet: {path: /health, port: vector-api}
@@ -64,3 +69,4 @@ spec:
   ports:
     - {name: fluent, port: 24224, targetPort: fluent}
     - {name: vector, port: 6000, targetPort: vector}
+    - {name: push, port: 8080, targetPort: push}

@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "$0")/.."
 docker run --rm -v "$PWD/router":/etc/k8s-log-router:ro -e NATS_URL=nats://127.0.0.1:4222 \
   timberio/vector:0.53.0-distroless-libc \
-  test /etc/k8s-log-router/vector.yaml /etc/k8s-log-router/tests/k8s-router.yaml
+  test /etc/k8s-log-router/vector.yaml /etc/k8s-log-router/tests/k8s-router.yaml /etc/k8s-log-router/tests/push.yaml
 docker run --rm -v "$PWD/audit":/etc/k8s-audit-collector:ro -e NATS_URL=nats://127.0.0.1:4222 \
   timberio/vector:0.53.0-distroless-libc \
   test /etc/k8s-audit-collector/vector.yaml /etc/k8s-audit-collector/tests/k8s-audit.yaml

@@ -1,0 +1,140 @@
+# Unit tests for router/push.vrl. Run with hack/test.sh
+# The bearer-token check runs in the http_server source (vector.yaml, auth),
+# which unit tests cannot reach; it is covered by the smoke test in the README.
+tests:
+  - name: trivy VulnerabilityReport is reduced to summary, image and critical/high findings
+    inputs:
+      - insert_at: push_route
+        type: vrl
+        source: |
+          vulns = [
+            {"vulnerabilityID": "CVE-2026-1000", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1001", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1002", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1003", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1004", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1005", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1006", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1007", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1008", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1009", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1010", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1011", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1012", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1013", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1014", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1015", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1016", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1017", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1018", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1019", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1020", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1021", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1022", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1023", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"},
+            {"vulnerabilityID": "CVE-2026-1024", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "3.0.1", "fixedVersion": "3.0.9", "title": "openssl: example", "description": "long text"}
+          ]
+          vulns = push(vulns, {"vulnerabilityID": "CVE-2026-0001", "severity": "LOW", "resource": "zlib"})
+          . = {"_push_path": "/v1/trivy", "source_type": "http_server", "timestamp": t'2026-11-25T10:00:00.123Z',
+               "apiVersion": "aquasecurity.github.io/v1alpha1", "kind": "VulnerabilityReport",
+               "metadata": {"name": "replicaset-web-5d9c7f-nginx", "namespace": "shop",
+                 "labels": {"trivy-operator.resource.kind": "ReplicaSet", "trivy-operator.resource.name": "web-5d9c7f",
+                            "trivy-operator.resource.namespace": "shop", "trivy-operator.container.name": "nginx"}},
+               "report": {"artifact": {"repository": "library/nginx", "tag": "1.16"}, "registry": {"server": "index.docker.io"},
+                          "scanner": {"name": "Trivy", "vendor": "Aqua Security", "version": "0.58.0"},
+                          "summary": {"criticalCount": 25, "highCount": 0, "mediumCount": 3, "lowCount": 1, "unknownCount": 0},
+                          "vulnerabilities": vulns}}
+    outputs:
+      - extract_from: push_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.source, "trivy")
+              assert_eq!(.feed, "push")
+              assert_eq!(.event_time, "2026-11-25T10:00:00.123Z")
+              assert_eq!(.kind, "VulnerabilityReport")
+              assert_eq!(.image, "index.docker.io/library/nginx:1.16")
+              assert_eq!(.resource, {"kind": "ReplicaSet", "name": "web-5d9c7f", "namespace": "shop", "container": "nginx"})
+              assert_eq!(.critical, true)
+              assert_eq!(.high, false)
+              assert_eq!(.summary.criticalCount, 25)
+              assert_eq!(length!(.findings), 20)
+              assert_eq!(.findings[0].id, "CVE-2026-1000")
+              assert!(!exists(.findings[0].description))
+              assert_eq!(.report_name, "replicaset-web-5d9c7f-nginx")
+              assert!(!exists(.metadata))
+              assert!(!exists(._push_path))
+              assert!(!exists(.source_type))
+
+  - name: trivy ExposedSecretReport never keeps the matched text
+    inputs:
+      - insert_at: push_route
+        type: vrl
+        source: |
+          . = {"_push_path": "/v1/trivy", "kind": "ExposedSecretReport",
+               "metadata": {"name": "replicaset-api-7f-api", "namespace": "shop",
+                 "labels": {"trivy-operator.resource.kind": "ReplicaSet", "trivy-operator.resource.name": "api-7f",
+                            "trivy-operator.resource.namespace": "shop", "trivy-operator.container.name": "api"}},
+               "report": {"artifact": {"repository": "example/api", "tag": "2.1"}, "registry": {"server": "ghcr.io"},
+                          "summary": {"criticalCount": 1, "highCount": 0, "mediumCount": 0, "lowCount": 0},
+                          "secrets": [{"ruleID": "aws-access-key-id", "category": "AWS", "severity": "CRITICAL",
+                                       "title": "AWS Access Key ID", "target": "/app/.env", "match": "AWS_ACCESS_KEY_ID=AKIA****************"}]}}
+    outputs:
+      - extract_from: push_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.kind, "ExposedSecretReport")
+              assert_eq!(.secrets, 1)
+              assert_eq!(.findings[0].id, "aws-access-key-id")
+              assert_eq!(.findings[0].target, "/app/.env")
+              assert!(!exists(.findings[0].match))
+              assert!(!contains(string!(.search_text), "AKIA"))
+
+  - name: trivy ConfigAuditReport keeps only failed critical/high checks
+    inputs:
+      - insert_at: push_route
+        type: vrl
+        source: |
+          . = {"_push_path": "/v1/trivy", "kind": "ConfigAuditReport",
+               "metadata": {"name": "replicaset-web", "namespace": "shop", "labels": {"trivy-operator.resource.kind": "ReplicaSet"}},
+               "report": {"summary": {"criticalCount": 0, "highCount": 1, "mediumCount": 2, "lowCount": 5},
+                          "checks": [{"checkID": "KSV017", "severity": "HIGH", "title": "Privileged container", "success": false},
+                                     {"checkID": "KSV001", "severity": "MEDIUM", "title": "Can elevate", "success": false},
+                                     {"checkID": "KSV012", "severity": "HIGH", "title": "Runs as root", "success": true}]}}
+    outputs:
+      - extract_from: push_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.high, true)
+              assert_eq!(.critical, false)
+              assert_eq!(.image, "")
+              assert_eq!(.resource.namespace, "shop")
+              assert_eq!(length!(.findings), 1)
+              assert_eq!(.findings[0].id, "KSV017")
+
+  - name: json lane keeps the object, and the body cannot forge the envelope
+    inputs:
+      - insert_at: push_route
+        type: vrl
+        source: |
+          . = {"_push_path": "/v1/falco", "rule": "Terminal shell in container", "priority": "Notice",
+               "source": "wazuh", "feed": "k8s", "Authorization": "Bearer x"}
+    outputs:
+      - extract_from: push_route
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.source, "falco")
+              assert_eq!(.feed, "push")
+              assert_eq!(.rule, "Terminal shell in container")
+              assert!(!exists(.Authorization))
+
+  - name: a path that is not /v1/<lane> is dropped
+    inputs:
+      - insert_at: push_route
+        type: vrl
+        source: |
+          . = {"_push_path": "/v1/../admin", "a": 1}
+    no_outputs_from: [push_route]
