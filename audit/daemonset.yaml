@@ -1,5 +1,5 @@
 # k8s-audit-collector: tails the API server audit log on control-plane nodes
-# and publishes the filtered events to samma.logs.k8s (JetStream).
+# and publishes the filtered events to samma.audit.k8s (JetStream).
 #
 # Runs as uid 65534 (nobody): on Talos the audit log is mode 0600 owned by
 # nobody. It mounts only the audit directory, read-only, and has no

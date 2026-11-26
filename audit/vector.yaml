@@ -1,4 +1,4 @@
-# k8s-audit-collector: Kubernetes API server audit log -> NATS samma.logs.k8s
+# k8s-audit-collector: Kubernetes API server audit log -> NATS samma.audit.k8s
 # (JetStream stream SIEM_AUDIT) -> detection-engine-k8s.
 #
 # Environment: NATS_URL (required), AUDIT_LOG (default
@@ -38,7 +38,7 @@ sinks:
     inputs: [k8s_audit]
     url: ${NATS_URL}
     connection_name: k8s-audit-collector
-    subject: samma.logs.k8s
+    subject: samma.audit.k8s
     jetstream: true
     encoding:
       codec: json

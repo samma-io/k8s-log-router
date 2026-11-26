@@ -140,13 +140,18 @@ nats sub 'samma.logs.svc.>'
 
 A second, separate component: `k8s-audit-collector` tails the Kubernetes API
 server audit log on control-plane nodes and publishes the events to
-`samma.logs.k8s` for the `k8s` detection lane.
+`samma.audit.k8s` for the `k8s` detection lane.
+
+The subject is deliberately not `samma.logs.k8s`: older Samma pipelines
+publish container logs there at a high rate, and a stream on it would fill
+with them. Run the engine with `ENGINE_LOG_SOURCE=k8s`,
+`ENGINE_NATS_STREAM=SIEM_AUDIT` and `ENGINE_NATS_SUBJECT=samma.audit.k8s`.
 
 ```
 kube-apiserver audit log (control-plane node, hostPath, read-only)
   → k8s-audit-collector DaemonSet (filter VRL)
-  → NATS samma.logs.k8s (stream SIEM_AUDIT)
-  → detection-engine (ENGINE_LOG_SOURCE=k8s) → samma.alerts.k8s
+  → NATS samma.audit.k8s (stream SIEM_AUDIT)
+  → detection-engine (ENGINE_LOG_SOURCE=k8s, ENGINE_NATS_SUBJECT=samma.audit.k8s) → samma.alerts.k8s
 ```
 
 The raw log is several MiB a minute even on a small cluster, almost all of it
@@ -170,7 +175,7 @@ Each record is the audit event unchanged, plus `source: k8s`, `feed: audit`,
 Install (the stream first; size it for about 20 MB a day per small cluster):
 
 ```bash
-nats stream add SIEM_AUDIT --subjects samma.logs.k8s --max-age 3d \
+nats stream add SIEM_AUDIT --subjects samma.audit.k8s --max-age 3d \
   --max-bytes 64MiB --storage file --retention limits --discard old --replicas 1 --defaults
 kubectl apply -k 'github.com/samma-io/k8s-log-router/audit?ref=<commit>'
 ```
