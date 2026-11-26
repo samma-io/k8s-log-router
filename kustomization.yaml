@@ -11,3 +11,4 @@ configMapGenerator:
     files:
       - router/vector.yaml
       - router/k8s-router.vrl
+      - router/push.vrl

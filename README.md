@@ -91,6 +91,7 @@ The Service `k8s-log-router` (ClusterIP) listens on two ports:
 |---|---|---|
 | 24224 | Fluent forward | fluent-bit with the kubernetes filter (`Labels On`, the default) |
 | 6000 | Vector native | a Vector agent with the `kubernetes_logs` source |
+| 8080 | HTTP push | a tool that POSTs JSON to `/v1/<lane>` (see "Push lanes") |
 
 Unlabelled records are dropped cheaply, so a shipper can send everything.
 
@@ -120,6 +121,50 @@ sinks:
     type: vector
     inputs: [pods]
     address: k8s-log-router.samma.svc:6000
+```
+
+## Push lanes
+
+Some tools send their findings instead of logging them: trivy-operator posts
+every report to a webhook. A push lane takes those over HTTP:
+
+```
+tool ──POST /v1/<lane>, Authorization: Bearer <token>──► k8s-log-router :8080
+  → NATS samma.logs.svc.<lane> (stream SIEM_SERVICES) → detection-engine-<lane>
+```
+
+- **A lane exists only while it has a token.** The router reads
+  `PUSH_TOKEN_<LANE>` (upper case, `-` as `_`) from the optional Secret
+  `k8s-log-router-push`. A request with no token, a wrong token, or a lane
+  with no token gets a 401 and is never published.
+- **The body** is one JSON object or an array of objects (one record each).
+  Anything else is a 400.
+- **The envelope** (`source` = the lane, `feed: push`, `event_time` when
+  received, `search_text`) is written last, so the body cannot forge it.
+- **Parsers** ([`router/push.vrl`](router/push.vrl), `push_parsers`): `json`
+  (default) keeps the object as sent. `trivy` reduces a trivy-operator report
+  to `kind`, `resource`, `image`, `summary`, `critical`/`high` booleans and up
+  to 20 critical or high `findings`, and never keeps a matched secret's text.
+
+The Service is ClusterIP: only workloads inside the cluster can push.
+
+### trivy-operator
+
+```bash
+TOKEN=$(openssl rand -hex 32)
+kubectl -n samma create secret generic k8s-log-router-push --from-literal=PUSH_TOKEN_TRIVY="$TOKEN"
+kubectl -n samma rollout restart deploy/k8s-log-router
+helm upgrade --install trivy-operator aqua/trivy-operator -n trivy-system --create-namespace \
+  --set operator.webhookBroadcastURL=http://k8s-log-router.samma.svc:8080/v1/trivy \
+  --set-string operator.webhookBroadcastCustomHeaders="Authorization:Bearer $TOKEN"
+```
+
+Smoke test from inside the cluster:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://k8s-log-router.samma.svc:8080/v1/trivy \
+  -H "Authorization: Bearer $TOKEN" -d '{"kind":"VulnerabilityReport","report":{"summary":{"criticalCount":0}}}'
+# 200; with a wrong token, 401
 ```
 
 ## Testing
