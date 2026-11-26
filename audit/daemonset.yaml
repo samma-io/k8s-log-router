@@ -1,0 +1,61 @@
+# k8s-audit-collector: tails the API server audit log on control-plane nodes
+# and publishes the filtered events to samma.logs.k8s (JetStream).
+#
+# Runs as uid 65534 (nobody): on Talos the audit log is mode 0600 owned by
+# nobody. It mounts only the audit directory, read-only, and has no
+# Kubernetes API access. Adjust the hostPath and AUDIT_LOG if your
+# distribution writes the log elsewhere (kubeadm: --audit-log-path).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: k8s-audit-collector
+  labels:
+    app.kubernetes.io/name: k8s-audit-collector
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-audit-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8s-audit-collector
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+        - {key: node-role.kubernetes.io/master, operator: Exists, effect: NoSchedule}
+      securityContext: {runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534, seccompProfile: {type: RuntimeDefault}}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: vector
+          image: timberio/vector:0.53.0-distroless-libc
+          args: ["--config", "/etc/k8s-audit-collector/vector.yaml"]
+          env:
+            - {name: NATS_URL, value: "nats://nats.samma.svc:4222"}
+            - {name: AUDIT_LOG, value: /var/log/audit/kube/kube-apiserver.log}
+            - {name: VRL_DIR, value: /etc/k8s-audit-collector}
+          ports:
+            - {name: vector-api, containerPort: 8686}
+          livenessProbe:
+            httpGet: {path: /health, port: vector-api}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: {path: /health, port: vector-api}
+            periodSeconds: 10
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/k8s-audit-collector, readOnly: true}
+            - {name: audit, mountPath: /var/log/audit/kube, readOnly: true}
+            - {name: data, mountPath: /var/lib/vector}
+      volumes:
+        - name: config
+          configMap: {name: k8s-audit-collector}
+        - name: audit
+          hostPath: {path: /var/log/audit/kube, type: Directory}
+        - name: data
+          emptyDir: {}

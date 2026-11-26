@@ -1,0 +1,273 @@
+# Unit tests for audit/k8s-audit.vrl. Run with hack/test.sh
+tests:
+- name: exec into a pod (verb get on 1.30+) is kept with the envelope
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/pods/app-0", "verb":
+        "get", "user": {"username": "developer@example.com", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "pods", "namespace":
+        "default", "name": "app-0", "apiVersion": "v1", "subresource": "exec"}, "responseStatus": {"metadata": {}, "code": 101}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp":
+        "2026-11-25T10:00:00.200000Z"}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: 'assert_eq!(.source, "k8s")
+
+        assert_eq!(.feed, "audit")
+
+        assert_eq!(.kind, "Event")
+
+        assert_eq!(.objectRef.subresource, "exec")
+
+        assert_eq!(.event_time, "2026-11-25T10:00:00.123Z")
+
+        assert_eq!(.search_text, "get pods/exec default/app-0 by developer@example.com -> 101")
+
+        assert!(!exists(.message))'
+- name: secret read is kept
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/argocd/secrets/repo", "verb":
+        "get", "user": {"username": "system:serviceaccount:argocd:argocd-application-controller", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef":
+        {"resource": "secrets", "namespace": "argocd", "name": "repo", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp":
+        "2026-11-25T10:00:00.200000Z"}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: assert_eq!(.objectRef.resource, "secrets")
+- name: rolebinding create keeps its requestObject
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/None/clusterrolebindings/pwn",
+        "verb": "create", "user": {"username": "developer@example.com", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "clusterrolebindings",
+        "name": "pwn", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z", "requestObject":
+        {"roleRef": {"name": "cluster-admin"}}, "responseObject": {"big": "x"}}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: 'assert_eq!(.requestObject.roleRef.name, "cluster-admin")
+
+        assert!(!exists(.responseObject))
+
+        assert_eq!(.search_text, "create clusterrolebindings pwn by developer@example.com -> 200")'
+- name: secret create never carries the secret body
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/secrets/db", "verb":
+        "create", "user": {"username": "developer@example.com", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "secrets", "namespace":
+        "default", "name": "db", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 201}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z",
+        "requestObject": {"data": {"password": "c2VjcmV0"}}}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: assert!(!exists(.requestObject))
+- name: 403 from a node is kept
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/secrets/x", "verb":
+        "get", "user": {"username": "system:node:node1", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "secrets", "namespace":
+        "default", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 403}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: assert_eq!(.responseStatus.code, 403)
+- name: anonymous request is kept
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/None/namespaces/", "verb":
+        "get", "user": {"username": "system:anonymous", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "namespaces", "name":
+        "", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 401}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: assert_eq!(.user.username, "system:anonymous")
+- name: coredns ConfigMap patch in kube-system is kept
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/kube-system/configmaps/coredns",
+        "verb": "patch", "user": {"username": "system:serviceaccount:kube-system:dns-autoscaler", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef":
+        {"resource": "configmaps", "namespace": "kube-system", "name": "coredns", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z",
+        "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: assert_eq!(.objectRef.name, "coredns")
+- name: event delete is kept
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/events/e1", "verb":
+        "delete", "user": {"username": "developer@example.com", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "events", "namespace":
+        "default", "name": "e1", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: assert_eq!(.verb, "delete")
+- name: deployment patch by a person is kept
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/deployments/web",
+        "verb": "patch", "user": {"username": "developer@example.com", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "deployments",
+        "namespace": "default", "name": "web", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  outputs:
+  - extract_from: k8s_audit
+    conditions:
+    - type: vrl
+      source: assert_eq!(.verb, "patch")
+- name: RequestReceived stage is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "RequestReceived", "requestURI": "/api/v1/namespaces/default/pods/x", "verb":
+        "get", "user": {"username": "developer@example.com", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "pods", "namespace":
+        "default", "name": "x", "apiVersion": "v1", "subresource": "exec"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp":
+        "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: node status update is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/None/nodes/x", "verb":
+        "update", "user": {"username": "system:node:node1", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "nodes", "name": "x",
+        "apiVersion": "v1", "subresource": "status"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: controller-manager write is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/deployments/x",
+        "verb": "update", "user": {"username": "system:kube-controller-manager", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource":
+        "deployments", "namespace": "default", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp":
+        "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: lease renew is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/leases/x", "verb":
+        "update", "user": {"username": "system:serviceaccount:longhorn-system:longhorn", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource":
+        "leases", "namespace": "default", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp":
+        "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: status subresource write is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/volumes/x", "verb":
+        "update", "user": {"username": "system:serviceaccount:longhorn-system:longhorn", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource":
+        "volumes", "namespace": "default", "name": "x", "apiVersion": "v1", "subresource": "status"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z",
+        "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: watch on secrets is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/secrets/x", "verb":
+        "watch", "user": {"username": "system:serviceaccount:traefik:traefik", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource":
+        "secrets", "namespace": "default", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp":
+        "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: pod list is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/pods/x", "verb":
+        "list", "user": {"username": "developer@example.com", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "pods", "namespace":
+        "default", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: operator ConfigMap update is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/sql/configmaps/x", "verb":
+        "update", "user": {"username": "system:serviceaccount:sql:mysql-operator", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource":
+        "configmaps", "namespace": "sql", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp":
+        "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: argocd Application patch is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/argocd/applications/x",
+        "verb": "patch", "user": {"username": "system:serviceaccount:argocd:argocd-application-controller", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0",
+        "objectRef": {"resource": "applications", "namespace": "argocd", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z",
+        "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: access review is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/None/selfsubjectaccessreviews/x",
+        "verb": "create", "user": {"username": "system:serviceaccount:ankra:agent", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource":
+        "selfsubjectaccessreviews", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: event create is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"kind": "Event", "apiVersion": "audit.k8s.io/v1", "level": "Metadata", "auditID": "00000000-test", "stage": "ResponseComplete", "requestURI": "/api/v1/namespaces/default/events/x", "verb":
+        "create", "user": {"username": "system:serviceaccount:default:x", "groups": ["system:authenticated"]}, "sourceIPs": ["192.0.2.10"], "userAgent": "kubectl/v1.33.0", "objectRef": {"resource": "events",
+        "namespace": "default", "name": "x", "apiVersion": "v1"}, "responseStatus": {"metadata": {}, "code": 200}, "requestReceivedTimestamp": "2026-11-25T10:00:00.123456Z", "stageTimestamp": "2026-11-25T10:00:00.200000Z"}'
+  no_outputs_from:
+  - k8s_audit
+- name: a line that is not an audit event is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: '{"hello":"world"}'
+  no_outputs_from:
+  - k8s_audit
+- name: a line that is not JSON is dropped
+  inputs:
+  - insert_at: k8s_audit
+    type: log
+    log_fields:
+      message: not json
+  no_outputs_from:
+  - k8s_audit
