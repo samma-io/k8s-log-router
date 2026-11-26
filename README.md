@@ -37,18 +37,33 @@ the pod runs in a namespace allowed for that lane:
 
 ```
 lanes = {
-  "traefik": ["traefik"]
+  "traefik": {"namespaces": ["traefik"], "parse": "json"},
+  "keycloak": {"namespaces": ["keycloak"], "parse": "keycloak"}
 }
 ```
 
 Everything else is dropped. Without this, anyone allowed to label a pod could
 write into any lane (for example `wazuh`) and forge or flood its alerts.
 
-To add a lane, add one line, apply, and run a detection engine for it with
+To add a lane, add one entry, apply, and run a detection engine for it with
 `ENGINE_NATS_STREAM=SIEM_SERVICES` and `ENGINE_NATS_SUBJECT=samma.logs.svc.<lane>`,
 plus a durable consumer `detection-engine-<lane>` on that subject.
 
 ## Records
+
+Each lane names its parser with `parse` (default `json`):
+
+| Parser | Lanes | What it keeps |
+|---|---|---|
+| `json` | `traefik` | every line: a JSON line's fields at the top level, any other line as `message` |
+| `keycloak` | `keycloak` | only `org.keycloak.events` lines; their `key="value"` pairs (`type`, `realmName`, `clientId`, `userId`, `ipAddress`, `error`, ...) at the top level, plus `level`. Works with the default text log and with `KC_LOG_CONSOLE_OUTPUT=json` |
+
+Keycloak logs failed events only by default. To log successful logins and
+password changes too, set `KC_SPI_EVENTS_LISTENER_JBOSS_LOGGING_SUCCESS_LEVEL=info`
+on the Keycloak container. Admin events need "Save admin events" in each
+realm's event settings.
+
+With the `json` parser:
 
 - **A JSON log line** is parsed, and its fields are kept at the top level, so
   rules match the application's own names (Traefik: `RequestPath`,
