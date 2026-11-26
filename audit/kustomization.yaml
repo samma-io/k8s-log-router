@@ -1,0 +1,13 @@
+# kubectl apply -k github.com/samma-io/k8s-log-router/audit?ref=<commit>
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: samma
+labels:
+  - pairs: {app.kubernetes.io/part-of: siem}
+resources:
+  - daemonset.yaml
+configMapGenerator:
+  - name: k8s-audit-collector
+    files:
+      - vector.yaml
+      - k8s-audit.vrl
