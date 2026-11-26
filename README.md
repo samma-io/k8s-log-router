@@ -66,6 +66,25 @@ plus a durable consumer `detection-engine-<lane>` on that subject.
 
 ## Install
 
+### With the Samma SIEM chart
+
+The [`samma-siem`](https://github.com/samma-io/siem/tree/main/chart/samma-siem)
+chart (0.5.0 or later) deploys this router, the `SIEM_SERVICES` stream and an
+engine per lane when you turn on a service detection:
+
+```yaml
+detections:
+  traefik: {enabled: true, namespaces: [traefik]}
+```
+
+The chart writes the allowlist from those values; its `files/k8s-log-router/` is a
+copy of `router/`, so a change here is copied there. The Service is then
+`<release>-k8s-log-router`. The guide chapter
+[10](https://github.com/samma-io/guide/tree/main/10-kubernetes-service-logs) walks
+through Traefik end to end.
+
+### On its own
+
 You need a Samma SIEM with JetStream NATS in namespace `samma`, and a stream
 covering `samma.logs.svc.>`:
 
